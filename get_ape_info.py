@@ -4,17 +4,19 @@ import requests
 import json
 
 bayc_address = "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D"
-contract_address = Web3.toChecksumAddress(bayc_address)
-
-# Load the ABI for the Bored Ape Yacht Club contract
-with open('/home/codio/workspace/abi.json', 'r') as f:
-    abi = json.load(f)
 
 # Connect to an Ethereum node (provide the URL of your Ethereum node, e.g., Infura)
 api_url = "https://mainnet.infura.io/v3/7569e80fb3444a94af90c292296c313a"
 provider = HTTPProvider(api_url)
 web3 = Web3(provider)
 assert web3.is_connected(), "Failed to connect to Ethereum node"
+
+# Convert bayc_address to checksum format after creating web3 instance
+contract_address = web3.toChecksumAddress(bayc_address)
+
+# Load the ABI for the Bored Ape Yacht Club contract
+with open('/home/codio/workspace/abi.json', 'r') as f:
+    abi = json.load(f)
 
 # Instantiate the contract object
 contract = web3.eth.contract(address=contract_address, abi=abi)
