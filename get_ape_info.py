@@ -4,7 +4,7 @@ import requests
 import json
 
 bayc_address = "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D"
-contract_address = web3.toChecksumAddress(bayc_address)
+contract_address = Web3.toChecksumAddress(bayc_address)
 
 # Load the ABI for the Bored Ape Yacht Club contract
 with open('/home/codio/workspace/abi.json', 'r') as f:
