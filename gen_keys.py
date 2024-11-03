@@ -6,43 +6,43 @@ from eth_account.messages import encode_defunct
 
 def get_keys(challenge, keyId=0, filename="eth_mnemonic.txt"):
     """
-    Generate a stable private key
+    Generate or retrieve a stable private key.
     challenge - byte string
     keyId (integer) - which key to use
-    filename - filename to read and store mnemonics
+    filename - filename to read and store private keys
 
-    Each mnemonic is stored on a separate line.
-    If fewer than (keyId+1) mnemonics have been generated, generate a new one and return that.
+    Each private key is stored on a separate line.
+    If fewer than (keyId+1) keys have been generated, generate a new one and save it.
     """
 
     w3 = Web3()
     msg = encode_defunct(challenge)
 
-    # Step 1: Load or generate mnemonic
+    # Step 1: Load existing private keys or create the file if it doesn’t exist
     if os.path.exists(filename):
         with open(filename, "r") as f:
-            mnemonics = f.read().splitlines()
+            keys = f.read().splitlines()
     else:
-        mnemonics = []
+        keys = []
 
-    # If mnemonic for keyId doesn't exist, create a new one and save it
-    if keyId >= len(mnemonics):
-        # Generate a new account and save its mnemonic
-        account = Account.create()
-        private_key = account.key.hex()
-        mnemonics.append(private_key)
+    # Step 2: Check if private key for keyId exists; otherwise, generate and save a new one
+    if keyId >= len(keys):
+        # Generate a new account and save its private key
+        new_account = Account.create()
+        private_key = new_account.key.hex()
+        keys.append(private_key)
         with open(filename, "a") as f:
             f.write(private_key + "\n")
     else:
         # Retrieve the private key for the specified keyId
-        private_key = mnemonics[keyId]
+        private_key = keys[keyId]
 
-    # Step 2: Create account from private key
+    # Step 3: Create account from private key
     acct = Account.from_key(private_key)
     eth_addr = acct.address
 
-    # Step 3: Sign the message
-    sig = Account.sign_message(msg, private_key=acct.key)
+    # Step 4: Sign the message
+    sig = acct.sign_message(msg)
 
     # Ensure that the signature can be recovered to the correct address
     assert eth_account.Account.recover_message(msg, signature=sig.signature) == eth_addr, "Failed to sign message properly"
