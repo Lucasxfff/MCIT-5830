@@ -8,7 +8,7 @@ import "./BridgeToken.sol";
 contract Destination is AccessControl {
     bytes32 public constant WARDEN_ROLE = keccak256("BRIDGE_WARDEN_ROLE");
     bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
-    
+
     mapping(address => address) public underlying_tokens; // Maps underlying token to wrapped token
     mapping(address => address) public wrapped_tokens;    // Maps wrapped token to underlying token
     address[] public tokens;
@@ -34,7 +34,7 @@ contract Destination is AccessControl {
         wrapped_tokens[wrapped_token] = _underlying_token;
         tokens.push(wrapped_token);
 
-        emit Creation(_underlying_token, wrapped_token);
+        emit Creation(_underlying_token, wrapped_token);  // Emit the event with correct parameters
 
         return wrapped_token;
     }
@@ -46,7 +46,7 @@ contract Destination is AccessControl {
 
         BridgeToken(wrapped_token).mint(_recipient, _amount);
 
-        emit Wrap(_underlying_token, wrapped_token, _recipient, _amount);
+        emit Wrap(_underlying_token, wrapped_token, _recipient, _amount);  // Emit the event with correct parameters
     }
 
     // Burns wrapped tokens for unwrapping
@@ -56,6 +56,6 @@ contract Destination is AccessControl {
 
         BridgeToken(_wrapped_token).burnFrom(msg.sender, _amount);
 
-        emit Unwrap(underlying_token, _wrapped_token, msg.sender, _recipient, _amount);
+        emit Unwrap(underlying_token, _wrapped_token, msg.sender, _recipient, _amount);  // Emit the event with correct parameters
     }
 }
