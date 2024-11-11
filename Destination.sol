@@ -23,7 +23,7 @@ contract Destination is AccessControl {
         _grantRole(WARDEN_ROLE, admin);
     }
 
-    // Creates a new wrapped token
+    // Function to create a new wrapped token
     function createToken(address _underlying_token, string memory name, string memory symbol) 
         public onlyRole(CREATOR_ROLE) returns (address) 
     {
@@ -42,7 +42,7 @@ contract Destination is AccessControl {
         return wrapped_token;
     }
 
-    // Wrap function to mint wrapped tokens for an underlying asset
+    // Function to mint wrapped tokens for an underlying asset
     function wrap(address _underlying_token, address _recipient, uint256 _amount) 
         public onlyRole(WARDEN_ROLE) 
     {
@@ -57,11 +57,11 @@ contract Destination is AccessControl {
         emit Wrap(_underlying_token, wrapped_token, _recipient, _amount);
     }
 
-    // Unwrap function to burn wrapped tokens
+    // Function to burn wrapped tokens for unwrapping
     function unwrap(address _wrapped_token, address _recipient, uint256 _amount) 
         public 
     {
-        // Verify the wrapped token is registered
+        // Verify that the wrapped token is registered
         address underlying_token = wrapped_tokens[_wrapped_token];
         require(underlying_token != address(0), "Wrapped token not registered");
 
