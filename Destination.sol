@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./BridgeToken.sol";
 
@@ -23,46 +22,34 @@ contract Destination is AccessControl {
         _grantRole(WARDEN_ROLE, admin);
     }
 
-    function createToken(address _underlying_token, string memory name, string memory symbol) public onlyRole(CREATOR_ROLE) returns (address) {
-        require(_underlying_token != address(0), "Invalid underlying token address");
-        require(wrapped_tokens[_underlying_token] == address(0), "Wrapped token already exists");
-
-        BridgeToken wrappedToken = new BridgeToken(_underlying_token, name, symbol, msg.sender);
-        address wrappedTokenAddress = address(wrappedToken);
-
-        underlying_tokens[wrappedTokenAddress] = _underlying_token;
-        wrapped_tokens[_underlying_token] = wrappedTokenAddress;
-        tokens.push(_underlying_token);
-
-        emit Creation(_underlying_token, wrappedTokenAddress);
-        return wrappedTokenAddress;
-    }
-
     function wrap(address _underlying_token, address _recipient, uint256 _amount) public onlyRole(WARDEN_ROLE) {
-        require(_underlying_token != address(0), "Invalid underlying token address");
-        require(_recipient != address(0), "Invalid recipient address");
-        require(_amount > 0, "Amount must be greater than zero");
+        address wrapped_token = wrapped_tokens[_underlying_token];
+        require(wrapped_token != address(0), "Wrapped token does not exist");
 
-        address wrappedTokenAddress = wrapped_tokens[_underlying_token];
-        require(wrappedTokenAddress != address(0), "Wrapped token does not exist");
-
-        BridgeToken wrappedToken = BridgeToken(wrappedTokenAddress);
-        wrappedToken.mint(_recipient, _amount);
-
-        emit Wrap(_underlying_token, wrappedTokenAddress, _recipient, _amount);
+        BridgeToken(wrapped_token).mint(_recipient, _amount);
+        emit Wrap(_underlying_token, wrapped_token, _recipient, _amount);
     }
 
     function unwrap(address _wrapped_token, address _recipient, uint256 _amount) public {
-        require(_wrapped_token != address(0), "Invalid wrapped token address");
-        require(_recipient != address(0), "Invalid recipient address");
-        require(_amount > 0, "Amount must be greater than zero");
+        address underlying_token = underlying_tokens[_wrapped_token];
+        require(underlying_token != address(0), "Underlying token does not exist");
 
-        address underlyingTokenAddress = underlying_tokens[_wrapped_token];
-        require(underlyingTokenAddress != address(0), "Underlying token does not exist");
+        BridgeToken(_wrapped_token).burnFrom(msg.sender, _amount);
+        emit Unwrap(underlying_token, _wrapped_token, msg.sender, _recipient, _amount);
+    }
 
-        BridgeToken wrappedToken = BridgeToken(_wrapped_token);
-        wrappedToken.burnFrom(msg.sender, _amount);
+    function createToken(address _underlying_token, string memory name, string memory symbol) public onlyRole(CREATOR_ROLE) returns (address) {
+        require(wrapped_tokens[_underlying_token] == address(0), "Wrapped token already exists");
 
-        emit Unwrap(underlyingTokenAddress, _wrapped_token, msg.sender, _recipient, _amount);
+        BridgeToken wrapped_token = new BridgeToken(_underlying_token, name, symbol, address(this));
+        wrapped_tokens[_underlying_token] = address(wrapped_token);
+        underlying_tokens[address(wrapped_token)] = _underlying_token;
+        tokens.push(_underlying_token);
+
+        // Grant MINTER_ROLE to this contract
+        wrapped_token.grantRole(wrapped_token.MINTER_ROLE(), address(this));
+
+        emit Creation(_underlying_token, address(wrapped_token));
+        return address(wrapped_token);
     }
 }
