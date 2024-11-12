@@ -9,8 +9,8 @@ contract Destination is AccessControl {
     bytes32 public constant WARDEN_ROLE = keccak256("BRIDGE_WARDEN_ROLE");
     bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
 
-    mapping(address => address) public underlying_tokens; // Maps underlying token to wrapped token
-    mapping(address => address) public wrapped_tokens;    // Maps wrapped token to underlying token
+    mapping(address => address) public underlying_tokens;
+    mapping(address => address) public wrapped_tokens;
     address[] public tokens;
 
     event Creation(address indexed underlying_token, address indexed wrapped_token);
@@ -23,47 +23,37 @@ contract Destination is AccessControl {
         _grantRole(WARDEN_ROLE, admin);
     }
 
-    // Creates a new BridgeToken for the specified underlying token
-    function createToken(address _underlying_token, string memory name, string memory symbol) public onlyRole(CREATOR_ROLE) returns (address) {
-        require(underlying_tokens[_underlying_token] == address(0), "Token already created");
-
-        // Deploy a new BridgeToken with the Destination contract as the admin
-        BridgeToken newToken = new BridgeToken(_underlying_token, name, symbol, address(this));
-        address wrapped_token = address(newToken);
-
-        // Update mappings to link the underlying token and the wrapped token
-        underlying_tokens[_underlying_token] = wrapped_token;
-        wrapped_tokens[wrapped_token] = _underlying_token;
-
-        tokens.push(wrapped_token);  // Track the new wrapped token
-
-        // Emit the Creation event
-        emit Creation(_underlying_token, wrapped_token);
-
-        return wrapped_token;
-    }
-
-    // Mints wrapped tokens for the specified underlying asset
     function wrap(address _underlying_token, address _recipient, uint256 _amount) public onlyRole(WARDEN_ROLE) {
-        address wrapped_token = underlying_tokens[_underlying_token];
+        address wrapped_token = wrapped_tokens[_underlying_token];
         require(wrapped_token != address(0), "Token not registered");
 
-        // Mint the specified amount of wrapped tokens to the recipient
-        BridgeToken(wrapped_token).mint(_recipient, _amount);
+        BridgeToken wToken = BridgeToken(wrapped_token);
+        wToken.mint(_recipient, _amount);
 
-        // Emit the Wrap event
         emit Wrap(_underlying_token, wrapped_token, _recipient, _amount);
     }
 
-    // Burns wrapped tokens to release the underlying asset
     function unwrap(address _wrapped_token, address _recipient, uint256 _amount) public {
-        address underlying_token = wrapped_tokens[_wrapped_token];
-        require(underlying_token != address(0), "Wrapped token not registered");
+        address underlying_token = underlying_tokens[_wrapped_token];
+        require(underlying_token != address(0), "Token not registered");
 
-        // Only the owner of the tokens can burn them
-        BridgeToken(_wrapped_token).burnFrom(msg.sender, _amount);
+        BridgeToken wToken = BridgeToken(_wrapped_token);
+        wToken.burnFrom(msg.sender, _amount);
 
-        // Emit the Unwrap event
         emit Unwrap(underlying_token, _wrapped_token, msg.sender, _recipient, _amount);
+    }
+
+    function createToken(address _underlying_token, string memory name, string memory symbol) public onlyRole(CREATOR_ROLE) returns (address) {
+        require(wrapped_tokens[_underlying_token] == address(0), "Token already registered");
+
+        BridgeToken wToken = new BridgeToken(_underlying_token, name, symbol, msg.sender);
+        address wrapped_token = address(wToken);
+
+        underlying_tokens[wrapped_token] = _underlying_token;
+        wrapped_tokens[_underlying_token] = wrapped_token;
+        tokens.push(_underlying_token);
+
+        emit Creation(_underlying_token, wrapped_token);
+        return wrapped_token;
     }
 }
