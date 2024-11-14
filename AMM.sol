@@ -1,20 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol"; // This allows role-based access control through _grantRole() and the modifier onlyRole
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol"; // This contract needs to interact with ERC20 tokens
 
 contract AMM is AccessControl {
     bytes32 public constant LP_ROLE = keccak256("LP_ROLE");
     uint256 public invariant;
     address public tokenA;
     address public tokenB;
-    uint256 public feebps = 30; // Fee in basis points (0.3%)
+    uint256 public feebps = 30; // The fee in basis points (i.e., the fee should be feebps/10000)
 
     event Swap(address indexed _inToken, address indexed _outToken, uint256 inAmt, uint256 outAmt);
     event LiquidityProvision(address indexed _from, uint256 AQty, uint256 BQty);
     event Withdrawal(address indexed _from, address indexed recipient, uint256 AQty, uint256 BQty);
 
+    /*
+        Constructor sets the addresses of the two tokens
+    */
     constructor(address _tokenA, address _tokenB) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(LP_ROLE, msg.sender);
@@ -31,6 +34,13 @@ contract AMM is AccessControl {
         return index == 0 ? tokenA : tokenB;
     }
 
+    /*
+        The main trading function
+
+        User provides sellToken and sellAmount
+
+        The contract must calculate buyAmount using the formula:
+    */
     function tradeTokens(address sellToken, uint256 sellAmount) public {
         require(invariant > 0, "Invariant must be nonzero");
         require(sellToken == tokenA || sellToken == tokenB, "Invalid token");
@@ -60,6 +70,9 @@ contract AMM is AccessControl {
         emit Swap(sellToken, buyToken, sellAmount, buyAmount);
     }
 
+    /*
+        Use the ERC20 transferFrom to "pull" amtA of tokenA and amtB of tokenB from the sender
+    */
     function provideLiquidity(uint256 amtA, uint256 amtB) public {
         require(amtA > 0 && amtB > 0, "Cannot provide 0 liquidity");
 
@@ -74,6 +87,10 @@ contract AMM is AccessControl {
         emit LiquidityProvision(msg.sender, amtA, amtB);
     }
 
+    /*
+        Use the ERC20 transfer function to send amtA of tokenA and amtB of tokenB to the target recipient
+        The modifier onlyRole(LP_ROLE) 
+    */
     function withdrawLiquidity(address recipient, uint256 amtA, uint256 amtB) public onlyRole(LP_ROLE) {
         require(amtA > 0 || amtB > 0, "Cannot withdraw 0");
         require(recipient != address(0), "Cannot withdraw to 0 address");
