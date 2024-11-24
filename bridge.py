@@ -26,10 +26,10 @@ def connectTo(chain):
         w3.middleware_onion.inject(geth_poa_middleware, layer=0)
     return w3
 
-def getContractInfo(chain=None):
+def getContractInfo():
     """
-    Load the contract_info file into a dictionary.
-    If a chain is specified, return the details for that chain.
+    Load the contract_info file into a dictionary and validate its structure.
+    Returns a dictionary with `source` and `destination` contract details.
     """
     p = Path(__file__).with_name(contract_info)
     try:
@@ -41,8 +41,10 @@ def getContractInfo(chain=None):
         print(e)
         sys.exit(1)
 
-    if chain:
-        return contracts[chain]
+    if "source" not in contracts or "destination" not in contracts:
+        print("Invalid contract_info.json format. Missing 'source' or 'destination'.")
+        sys.exit(1)
+
     return contracts
 
 def scanBlocks(chain):
@@ -58,15 +60,17 @@ def scanBlocks(chain):
         print(f"Invalid chain: {chain}")
         return
 
-    w3 = connectTo(source_chain if chain == 'source' else destination_chain)
+    # Load contract info
     contract_info = getContractInfo()
-
     contract_details = contract_info['source'] if chain == 'source' else contract_info['destination']
     contract_address = Web3.to_checksum_address(contract_details['address'])
     contract_abi = contract_details['abi']
 
+    # Connect to appropriate chain
+    w3 = connectTo(source_chain if chain == 'source' else destination_chain)
     contract = w3.eth.contract(address=contract_address, abi=contract_abi)
 
+    # Get the latest block range
     latest_block = w3.eth.get_block_number()
     start_block = max(latest_block - 5, 0)
 
