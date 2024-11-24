@@ -3,36 +3,33 @@ from web3.contract import Contract
 from web3.providers.rpc import HTTPProvider
 from web3.middleware import geth_poa_middleware  # Necessary for POA chains
 import json
-import pandas as pd
 import sys
 from pathlib import Path
 
-# Constants
 source_chain = 'avax'
 destination_chain = 'bsc'
 contract_info = "contract_info.json"
-warden_private_key = "0x3d85dcb11d854ffe332cf0aac156f91ed0a721406aec64fc1c9f394eff60e693"  # Warden's private key
-events_file = "bridge_events.csv"
+warden_private_key = "your_private_key_here"
 
 def connectTo(chain):
     """
-    Connect to the appropriate testnet (Avalanche or BNB)
+    Connect to a blockchain based on the provided chain name ('avax' or 'bsc').
     """
     if chain == 'avax':
         api_url = f"https://api.avax-test.network/ext/bc/C/rpc"  # AVAX C-chain testnet
     elif chain == 'bsc':
         api_url = f"https://data-seed-prebsc-1-s1.binance.org:8545/"  # BSC testnet
     else:
-        raise ValueError("Invalid chain specified")
+        raise ValueError(f"Unsupported chain: {chain}")
 
     w3 = Web3(Web3.HTTPProvider(api_url))
-    w3.middleware_onion.inject(geth_poa_middleware, layer=0)  # Add middleware for POA chains
+    # Inject the POA compatibility middleware to the innermost layer
+    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
     return w3
 
-
-def getContractInfo():
+def getContractInfo(*args):
     """
-    Load the contract_info.json file
+    Load the contract_info.json file into a dictionary.
     """
     p = Path(__file__).with_name(contract_info)
     try:
@@ -40,125 +37,82 @@ def getContractInfo():
             contracts = json.load(f)
     except Exception as e:
         print("Failed to read contract info")
+        print(e)
         sys.exit(1)
     return contracts
 
-
-def validateEvents(chain, events):
-    """
-    Validate the scanned events against bridge_events.csv
-    """
-    df = pd.read_csv(events_file)
-    if chain == "source":
-        expected_events = df[df["event"] == "Deposit"]
-    elif chain == "destination":
-        expected_events = df[df["event"] == "Unwrap"]
-    else:
-        raise ValueError("Invalid chain specified")
-
-    for event in events:
-        match = expected_events[
-            (expected_events["transactionHash"] == event.transactionHash.hex()) &
-            (expected_events["address"] == event.address)
-        ]
-        if match.empty:
-            print(f"Unexpected event: {event}")
-        else:
-            print(f"Validated event: {event}")
-
-
 def scanBlocks(chain):
     """
-    Scan the last 5 blocks of the source and destination chains.
-    - Listen for Deposit events on the Source contract (AVAX chain)
-    - Listen for Unwrap events on the Destination contract (BSC chain)
-    - Trigger the appropriate cross-chain actions (wrap/unwrap)
+    Scan the last 5 blocks of the source and destination chains for specific events.
     """
-    contracts = getContractInfo()
-    chain_info = contracts[source_chain if chain == "source" else destination_chain]
-
-    w3 = connectTo(source_chain if chain == "source" else destination_chain)
-    contract_address = Web3.to_checksum_address(chain_info["address"])
-    contract_abi = chain_info["abi"]
-    contract = w3.eth.contract(address=contract_address, abi=contract_abi)
-
-    # Scan the last 5 blocks
+    w3 = connectTo(chain)
+    contract_data = getContractInfo()[chain]
+    contract = w3.eth.contract(address=Web3.to_checksum_address(contract_data["address"]),
+                               abi=contract_data["abi"])
+    
     latest_block = w3.eth.get_block_number()
-    start_block = latest_block - 5
-    print(f"Scanning {chain} chain from block {start_block} to {latest_block}")
+    start_block = max(latest_block - 5, 0)
+    end_block = latest_block
 
-    if chain == "source":
-        # Listen for Deposit events on the Source contract
-        event_filter = contract.events.Deposit.create_filter(
-            fromBlock=start_block, toBlock=latest_block
-        )
+    print(f"Scanning blocks {start_block} to {end_block} on {chain}")
+
+    # Event-specific logic
+    if chain == 'source':
+        event_filter = contract.events.Deposit.create_filter(fromBlock=start_block, toBlock=end_block)
         events = event_filter.get_all_entries()
-
-        validateEvents(chain, events)
-
         for event in events:
-            token = event.args.token
-            recipient = event.args.recipient
-            amount = event.args.amount
-            tx_hash = event.transactionHash.hex()
-
-            print(f"Deposit Event: {token}, {recipient}, {amount}, {tx_hash}")
-
-            # Call wrap on the Destination chain
-            wrapOnDestination(token, recipient, amount)
-
-    elif chain == "destination":
-        # Listen for Unwrap events on the Destination contract
-        event_filter = contract.events.Unwrap.create_filter(
-            fromBlock=start_block, toBlock=latest_block
-        )
+            processDepositEvent(w3, event)
+    elif chain == 'destination':
+        event_filter = contract.events.Unwrap.create_filter(fromBlock=start_block, toBlock=end_block)
         events = event_filter.get_all_entries()
-
-        validateEvents(chain, events)
-
         for event in events:
-            underlying_token = event.args.underlying_token
-            recipient = event.args.to
-            amount = event.args.amount
-            tx_hash = event.transactionHash.hex()
+            processUnwrapEvent(w3, event)
 
-            print(f"Unwrap Event: {underlying_token}, {recipient}, {amount}, {tx_hash}")
-
-            # Call withdraw on the Source chain
-            withdrawOnSource(underlying_token, recipient, amount)
-
-
-def wrapOnDestination(token, recipient, amount):
+def processDepositEvent(w3, event):
     """
-    Call the wrap function on the Destination contract
+    Process a Deposit event from the source chain.
     """
-    contracts = getContractInfo()
-    dest_info = contracts[destination_chain]
+    contract_data = getContractInfo()['destination']
+    contract = w3.eth.contract(address=Web3.to_checksum_address(contract_data["address"]),
+                               abi=contract_data["abi"])
 
-    w3 = connectTo(destination_chain)
-    contract_address = Web3.to_checksum_address(dest_info["address"])
-    contract_abi = dest_info["abi"]
-    contract = w3.eth.contract(address=contract_address, abi=contract_abi)
-
-    tx = contract.functions.wrap(token, recipient, amount).build_transaction({
-        "chainId": w3.eth.chain_id,
-        "gas": 300000,
-        "gasPrice": w3.eth.gas_price,
-        "nonce": w3.eth.get_transaction_count(w3.eth.account.privateKeyToAccount(warden_private_key).address)
+    transaction = contract.functions.wrap(
+        event.args['token'],
+        event.args['recipient'],
+        event.args['amount']
+    ).build_transaction({
+        "from": w3.eth.default_account,
+        "nonce": w3.eth.get_transaction_count(w3.eth.default_account)
     })
 
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print(f"Wrap transaction sent: {tx_hash.hex()}")
+    signed_txn = w3.eth.account.sign_transaction(transaction, private_key=warden_private_key)
+    w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+    print(f"Processed Deposit event: {event.args}")
 
-
-def withdrawOnSource(token, recipient, amount):
+def processUnwrapEvent(w3, event):
     """
-    Call the withdraw function on the Source contract
+    Process an Unwrap event from the destination chain.
     """
-    contracts = getContractInfo()
-    src_info = contracts[source_chain]
+    contract_data = getContractInfo()['source']
+    contract = w3.eth.contract(address=Web3.to_checksum_address(contract_data["address"]),
+                               abi=contract_data["abi"])
 
-    w3 = connectTo(source_chain)
-    contract_address = Web3.to_checksum_address(src_info["address"])
-    contract_abi = src_info
+    transaction = contract.functions.withdraw(
+        event.args['underlying_token'],
+        event.args['to'],
+        event.args['amount']
+    ).build_transaction({
+        "from": w3.eth.default_account,
+        "nonce": w3.eth.get_transaction_count(w3.eth.default_account)
+    })
+
+    signed_txn = w3.eth.account.sign_transaction(transaction, private_key=warden_private_key)
+    w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+    print(f"Processed Unwrap event: {event.args}")
+
+if __name__ == "__main__":
+    """
+    Main execution: listens for events and processes them.
+    """
+    for chain in ['source', 'destination']:
+        scanBlocks(chain)
