@@ -26,10 +26,10 @@ def connectTo(chain):
         w3.middleware_onion.inject(geth_poa_middleware, layer=0)
     return w3
 
-def getContractInfo():
+def getContractInfo(chain=None):
     """
-    Load the contract_info file into a dictionary
-    This function is used by the autograder and will likely be useful to you
+    Load the contract_info file into a dictionary.
+    If a chain is specified, return the details for that chain.
     """
     p = Path(__file__).with_name(contract_info)
     try:
@@ -41,6 +41,8 @@ def getContractInfo():
         print(e)
         sys.exit(1)
 
+    if chain:
+        return contracts[chain]
     return contracts
 
 def scanBlocks(chain):
