@@ -34,7 +34,7 @@ def getContractInfo(chain):
 
 def scanBlocks(chain):
     """
-    Scan blocks for events and act upon them
+    Scan blocks for events and act upon them.
     """
     if chain == "source":
         chain_name = "avax"
@@ -54,20 +54,20 @@ def scanBlocks(chain):
 
     contract = w3.eth.contract(address=contract_address, abi=contract_abi)
     latest_block = w3.eth.block_number
-    start_block = max(latest_block - 5, 0)  # Ensure start_block is non-negative
+    start_block = max(latest_block - 5, 0)
 
     try:
-        # Dynamically resolve the event name
-        event_class = getattr(contract.events, event_name)
-        event_filter = event_class.createFilter(fromBlock=start_block, toBlock="latest")
+        event_class = getattr(contract.events, event_name)  # Dynamically access the event
+        event_filter = event_class.create_filter(fromBlock=start_block, toBlock="latest")
         events = event_filter.get_all_entries()
-        print(f"Detected {len(events)} {event_name} events on {chain_name} chain.")
-        
-        # Process events
+        print(f"Found {len(events)} {event_name} events on {chain_name}.")
+
         for event in events:
             print(f"Processing event: {event}")
             handler(event)
-    
+
+    except AttributeError as e:
+        print(f"Error: Event '{event_name}' not defined in the contract's ABI: {e}")
     except Exception as e:
         print(f"Error scanning blocks on {chain_name}: {e}")
 
