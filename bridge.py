@@ -53,7 +53,7 @@ def scanBlocks(chain):
     # Create contract instance
     contract = w3.eth.contract(address=contract_address, abi=contract_abi)
     latest_block = w3.eth.block_number
-    start_block = latest_block - 5  # Scan the last 5 blocks
+    start_block = max(latest_block - 5, 0)  # Ensure start_block is non-negative
 
     # Set up event filters
     try:
@@ -63,7 +63,7 @@ def scanBlocks(chain):
             event_filter = contract.events.Unwrap.createFilter(fromBlock=start_block, toBlock="latest")
         
         events = event_filter.get_all_entries()
-        print(f"Detected {len(events)} events on {chain} chain.")
+        print(f"Detected {len(events)} events on {chain_name} chain.")
         
         # Process events
         for event in events:
