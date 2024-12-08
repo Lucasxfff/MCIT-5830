@@ -36,29 +36,45 @@ def scanBlocks(chain):
     """
     Scan blocks for events and act upon them
     """
-    w3 = connectTo(chain)
+    # Map "source" and "destination" to their actual chain names
+    if chain == "source":
+        chain_name = "avax"
+    elif chain == "destination":
+        chain_name = "bsc"
+    else:
+        raise ValueError("Invalid chain specified.")
+    
+    # Connect to the correct chain
+    w3 = connectTo(chain_name)
     contract_info = getContractInfo(chain)
     contract_address = contract_info["address"]
     contract_abi = contract_info["abi"]
 
+    # Create contract instance
     contract = w3.eth.contract(address=contract_address, abi=contract_abi)
     latest_block = w3.eth.block_number
     start_block = latest_block - 5  # Scan the last 5 blocks
 
-    if chain == "source":
-        event_filter = contract.events.Deposit.createFilter(fromBlock=start_block, toBlock="latest")
-    elif chain == "destination":
-        event_filter = contract.events.Unwrap.createFilter(fromBlock=start_block, toBlock="latest")
-    else:
-        raise ValueError("Invalid chain specified.")
-    
-    events = event_filter.get_all_entries()
-
-    for event in events:
+    # Set up event filters
+    try:
         if chain == "source":
-            handleDepositEvent(event)
+            event_filter = contract.events.Deposit.createFilter(fromBlock=start_block, toBlock="latest")
         elif chain == "destination":
-            handleUnwrapEvent(event)
+            event_filter = contract.events.Unwrap.createFilter(fromBlock=start_block, toBlock="latest")
+        
+        events = event_filter.get_all_entries()
+        print(f"Detected {len(events)} events on {chain} chain.")
+        
+        # Process events
+        for event in events:
+            print(f"Processing event: {event}")
+            if chain == "source":
+                handleDepositEvent(event)
+            elif chain == "destination":
+                handleUnwrapEvent(event)
+    
+    except Exception as e:
+        print(f"Error scanning blocks on {chain_name}: {e}")
 
 def handleDepositEvent(event):
     """
