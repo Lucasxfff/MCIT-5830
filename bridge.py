@@ -9,9 +9,9 @@ destination_chain = 'bsc'
 contract_info_file = "contract_info.json"
 warden_private_key = "0x3d85dcb11d854ffe332cf0aac156f91ed0a721406aec64fc1c9f394eff60e693"
 
-def connectTo(chain):
+def connect_to(chain):
     """
-    Connect to the blockchain
+    Connect to the specified blockchain.
     """
     if chain == 'avax':
         api_url = "https://api.avax-test.network/ext/bc/C/rpc"
@@ -24,31 +24,31 @@ def connectTo(chain):
     w3.middleware_onion.inject(geth_poa_middleware, layer=0)  # For POA chains
     return w3
 
-def getContractInfo(chain):
+def get_contract_info(chain):
     """
-    Load the contract information from the contract_info.json file
+    Load the contract information from the contract_info.json file.
     """
     with open(contract_info_file, 'r') as file:
         contracts = json.load(file)
     return contracts[chain]
 
-def scanBlocks(chain):
+def scan_blocks(chain):
     """
     Scan blocks for events and act upon them.
     """
     if chain == "source":
         chain_name = "avax"
         event_name = "Deposit"
-        handler = handleDepositEvent
+        handler = handle_deposit_event
     elif chain == "destination":
         chain_name = "bsc"
         event_name = "Unwrap"
-        handler = handleUnwrapEvent
+        handler = handle_unwrap_event
     else:
         raise ValueError("Invalid chain specified.")
     
-    w3 = connectTo(chain_name)
-    contract_info = getContractInfo(chain)
+    w3 = connect_to(chain_name)
+    contract_info = get_contract_info(chain)
     contract_address = contract_info["address"]
     contract_abi = contract_info["abi"]
 
@@ -71,46 +71,54 @@ def scanBlocks(chain):
     except Exception as e:
         print(f"Error scanning blocks on {chain_name}: {e}")
 
-def handleDepositEvent(event):
+def handle_deposit_event(event):
     """
-    Handle Deposit events from the source chain
+    Handle Deposit events from the source chain.
     """
-    destination_contract_info = getContractInfo("destination")
-    w3 = connectTo(destination_chain)
+    destination_contract_info = get_contract_info("destination")
+    w3 = connect_to(destination_chain)
     contract = w3.eth.contract(address=destination_contract_info["address"], abi=destination_contract_info["abi"])
-    tx = contract.functions.wrap(
-        event.args["token"],
-        event.args["recipient"],
-        event.args["amount"]
-    ).buildTransaction({
-        "chainId": w3.eth.chain_id,
-        "gas": 300000,
-        "gasPrice": w3.eth.gas_price,
-        "nonce": w3.eth.getTransactionCount(Account.from_key(warden_private_key).address),
-    })
+    
+    # Ensure the function name matches exactly as defined in the contract
+    try:
+        tx = contract.functions.wrap(
+            event.args["token"],
+            event.args["recipient"],
+            event.args["amount"]
+        ).build_transaction({  # Updated to snake_case
+            "chainId": w3.eth.chain_id,
+            "gas": 300000,
+            "gasPrice": w3.eth.gas_price,
+            "nonce": w3.eth.get_transaction_count(Account.from_key(warden_private_key).address),
+        })
 
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
-    w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print(f"Wrap transaction sent: {signed_tx.hash.hex()}")
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
+        w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print(f"Wrap transaction sent: {signed_tx.hash.hex()}")
+    except AttributeError as e:
+        print(f"Error: Function 'wrap' not found in the contract's ABI: {e}")
+    except Exception as e:
+        print(f"Error handling deposit event: {e}")
 
-def handleUnwrapEvent(event):
+def handle_unwrap_event(event):
     """
-    Handle Unwrap events from the destination chain
+    Handle Unwrap events from the destination chain.
     """
-    source_contract_info = getContractInfo("source")
-    w3 = connectTo(source_chain)
+    source_contract_info = get_contract_info("source")
+    w3 = connect_to(source_chain)
     contract = w3.eth.contract(address=source_contract_info["address"], abi=source_contract_info["abi"])
-    tx = contract.functions.withdraw(
-        event.args["underlying_token"],
-        event.args["to"],
-        event.args["amount"]
-    ).buildTransaction({
-        "chainId": w3.eth.chain_id,
-        "gas": 300000,
-        "gasPrice": w3.eth.gas_price,
-        "nonce": w3.eth.getTransactionCount(Account.from_key(warden_private_key).address),
-    })
+    
+    # Ensure the function name matches exactly as defined in the contract
+    try:
+        tx = contract.functions.withdraw(
+            event.args["underlying_token"],
+            event.args["to"],
+            event.args["amount"]
+        ).build_transaction({  # Updated to snake_case
+            "chainId": w3.eth.chain_id,
+            "gas": 300000,
+            "gasPrice": w3.eth.gas_price,
+            "nonce": w3.eth.get_transaction_count(Account.from_key(warden_private_key).address),
+        })
 
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
-    w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print(f"Withdraw transaction sent: {signed_tx.hash.hex()}")
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden 
