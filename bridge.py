@@ -4,12 +4,12 @@ import json
 from eth_account import Account
 
 # Constants
-SOURCE_CHAIN = 'avax'
-DESTINATION_CHAIN = 'bsc'
-CONTRACT_INFO_FILE = "contract_info.json"
-WARDEN_PRIVATE_KEY = "0x3d85dcb11d854ffe332cf0aac156f91ed0a721406aec64fc1c9f394eff60e693"
+source_chain = 'avax'
+destination_chain = 'bsc'
+contract_info_file = "contract_info.json"
+warden_private_key = "0x3d85dcb11d854ffe332cf0aac156f91ed0a721406aec64fc1c9f394eff60e693"
 
-def connect_to(chain):
+def connect_to_chain(chain):
     """
     Connect to the specified blockchain.
     """
@@ -28,27 +28,27 @@ def get_contract_info(chain):
     """
     Load the contract information from the contract_info.json file.
     """
-    with open(CONTRACT_INFO_FILE, 'r') as file:
+    with open(contract_info_file, 'r') as file:
         contracts = json.load(file)
     return contracts[chain]
 
-def scan_blocks(chain):
+def scan_blocks(chain_role):
     """
     Scan blocks for events and act upon them.
     """
-    if chain == SOURCE_CHAIN:
-        chain_name = SOURCE_CHAIN
+    if chain_role == "source":
+        chain_name = source_chain
         event_name = "Deposit"
         handler = handle_deposit_event
-    elif chain == DESTINATION_CHAIN:
-        chain_name = DESTINATION_CHAIN
+    elif chain_role == "destination":
+        chain_name = destination_chain
         event_name = "Unwrap"
         handler = handle_unwrap_event
     else:
-        raise ValueError("Invalid chain specified.")
+        raise ValueError("Invalid chain role specified.")
     
-    w3 = connect_to(chain_name)
-    contract_info = get_contract_info(chain_name)
+    w3 = connect_to_chain(chain_name)
+    contract_info = get_contract_info(chain_role)
     contract_address = contract_info["address"]
     contract_abi = contract_info["abi"]
 
@@ -75,42 +75,55 @@ def handle_deposit_event(event):
     """
     Handle Deposit events from the source chain.
     """
-    destination_contract_info = get_contract_info(DESTINATION_CHAIN)
-    w3 = connect_to(DESTINATION_CHAIN)
+    destination_contract_info = get_contract_info("destination")
+    w3 = connect_to_chain(destination_chain)
     contract = w3.eth.contract(address=destination_contract_info["address"], abi=destination_contract_info["abi"])
-    tx = contract.functions.wrap(
-        event.args["token"],
-        event.args["recipient"],
-        event.args["amount"]
-    ).build_transaction({
-        "chainId": w3.eth.chain_id,
-        "gas": 300000,
-        "gasPrice": w3.eth.gas_price,
-        "nonce": w3.eth.getTransactionCount(Account.from_key(WARDEN_PRIVATE_KEY).address),
-    })
+    
+    try:
+        tx = contract.functions.wrap(
+            event.args["token"],
+            event.args["recipient"],
+            event.args["amount"]
+        ).build_transaction({
+            "chainId": w3.eth.chain_id,
+            "gas": 300000,
+            "gasPrice": w3.eth.gas_price,
+            "nonce": w3.eth.get_transaction_count(Account.from_key(warden_private_key).address),
+        })
 
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=WARDEN_PRIVATE_KEY)
-    w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print(f"Wrap transaction sent: {signed_tx.hash.hex()}")
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print(f"Wrap transaction sent: {tx_hash.hex()}")
+    except Exception as e:
+        print(f"Error handling Deposit event: {e}")
 
 def handle_unwrap_event(event):
     """
     Handle Unwrap events from the destination chain.
     """
-    source_contract_info = get_contract_info(SOURCE_CHAIN)
-    w3 = connect_to(SOURCE_CHAIN)
+    source_contract_info = get_contract_info("source")
+    w3 = connect_to_chain(source_chain)
     contract = w3.eth.contract(address=source_contract_info["address"], abi=source_contract_info["abi"])
-    tx = contract.functions.withdraw(
-        event.args["underlying_token"],
-        event.args["to"],
-        event.args["amount"]
-    ).build_transaction({
-        "chainId": w3.eth.chain_id,
-        "gas": 300000,
-        "gasPrice": w3.eth.gas_price,
-        "nonce": w3.eth.getTransactionCount(Account.from_key(WARDEN_PRIVATE_KEY).address),
-    })
+    
+    try:
+        tx = contract.functions.withdraw(
+            event.args["underlying_token"],
+            event.args["to"],
+            event.args["amount"]
+        ).build_transaction({
+            "chainId": w3.eth.chain_id,
+            "gas": 300000,
+            "gasPrice": w3.eth.gas_price,
+            "nonce": w3.eth.get_transaction_count(Account.from_key(warden_private_key).address),
+        })
 
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=WARDEN_PRIVATE_KEY)
-    w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print(f"Withdraw transaction sent: {signed_tx.hash.hex()}")
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print(f"Withdraw transaction sent: {tx_hash.hex()}")
+    except Exception as e:
+        print(f"Error handling Unwrap event: {e}")
+
+if __name__ == "__main__":
+    # Example usage:
+    scan_blocks("source")
+    scan_blocks("destination")
