@@ -36,42 +36,36 @@ def scanBlocks(chain):
     """
     Scan blocks for events and act upon them
     """
-    # Map "source" and "destination" to their actual chain names
     if chain == "source":
         chain_name = "avax"
+        event_name = "Deposit"
+        handler = handleDepositEvent
     elif chain == "destination":
         chain_name = "bsc"
+        event_name = "Unwrap"
+        handler = handleUnwrapEvent
     else:
         raise ValueError("Invalid chain specified.")
     
-    # Connect to the correct chain
     w3 = connectTo(chain_name)
     contract_info = getContractInfo(chain)
     contract_address = contract_info["address"]
     contract_abi = contract_info["abi"]
 
-    # Create contract instance
     contract = w3.eth.contract(address=contract_address, abi=contract_abi)
     latest_block = w3.eth.block_number
     start_block = max(latest_block - 5, 0)  # Ensure start_block is non-negative
 
-    # Set up event filters
     try:
-        if chain == "source":
-            event_filter = contract.events.Deposit.createFilter(fromBlock=start_block, toBlock="latest")
-        elif chain == "destination":
-            event_filter = contract.events.Unwrap.createFilter(fromBlock=start_block, toBlock="latest")
-        
+        # Create event filter dynamically
+        event_filter = getattr(contract.events, event_name).createFilter(fromBlock=start_block, toBlock="latest")
         events = event_filter.get_all_entries()
-        print(f"Detected {len(events)} events on {chain_name} chain.")
+        print(f"Detected {len(events)} {event_name} events on {chain_name} chain.")
         
         # Process events
         for event in events:
             print(f"Processing event: {event}")
-            if chain == "source":
-                handleDepositEvent(event)
-            elif chain == "destination":
-                handleUnwrapEvent(event)
+            handler(event)
     
     except Exception as e:
         print(f"Error scanning blocks on {chain_name}: {e}")
