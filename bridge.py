@@ -57,8 +57,9 @@ def scanBlocks(chain):
     start_block = max(latest_block - 5, 0)  # Ensure start_block is non-negative
 
     try:
-        # Create event filter dynamically
-        event_filter = getattr(contract.events, event_name).createFilter(fromBlock=start_block, toBlock="latest")
+        # Dynamically resolve the event name
+        event_class = getattr(contract.events, event_name)
+        event_filter = event_class.createFilter(fromBlock=start_block, toBlock="latest")
         events = event_filter.get_all_entries()
         print(f"Detected {len(events)} {event_name} events on {chain_name} chain.")
         
