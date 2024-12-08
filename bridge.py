@@ -1,10 +1,7 @@
 from web3 import Web3
-from web3.contract import Contract
 from web3.middleware import geth_poa_middleware
 import json
 from eth_account import Account
-import sys
-from pathlib import Path
 
 # Constants
 source_chain = 'avax'
@@ -17,9 +14,9 @@ def connectTo(chain):
     Connect to the blockchain
     """
     if chain == 'avax':
-        api_url = "https://api.avax-test.network/ext/bc/C/rpc"  # AVAX C-chain testnet
+        api_url = "https://api.avax-test.network/ext/bc/C/rpc"
     elif chain == 'bsc':
-        api_url = "https://data-seed-prebsc-1-s1.binance.org:8545/"  # BSC testnet
+        api_url = "https://data-seed-prebsc-1-s1.binance.org:8545/"
     else:
         raise ValueError("Invalid chain specified.")
     
@@ -31,59 +28,42 @@ def getContractInfo(chain):
     """
     Load the contract information from the contract_info.json file
     """
-    p = Path(__file__).with_name(contract_info_file)
-    try:
-        with p.open('r') as file:
-            contracts = json.load(file)
-    except Exception as e:
-        print("Failed to read contract info")
-        print("Please contact your instructor")
-        print(e)
-        sys.exit(1)
+    with open(contract_info_file, 'r') as file:
+        contracts = json.load(file)
     return contracts[chain]
 
 def scanBlocks(chain):
     """
-    Scan the last 5 blocks for events and act upon them
+    Scan blocks for events and act upon them
     """
-    if chain not in ['source', 'destination']:
-        print(f"Invalid chain specified: {chain}")
-        return
-
-    # Map chain to actual chain constants
-    actual_chain = source_chain if chain == 'source' else destination_chain
-
-    # Connect to blockchain
-    w3 = connectTo(actual_chain)
+    w3 = connectTo(chain)
     contract_info = getContractInfo(chain)
     contract_address = contract_info["address"]
     contract_abi = contract_info["abi"]
 
-    # Load contract and scan blocks
     contract = w3.eth.contract(address=contract_address, abi=contract_abi)
     latest_block = w3.eth.block_number
     start_block = latest_block - 5  # Scan the last 5 blocks
 
-    print(f"Scanning {chain} chain from block {start_block} to {latest_block}")
-    if chain == 'source':
+    if chain == "source":
         event_filter = contract.events.Deposit.createFilter(fromBlock=start_block, toBlock="latest")
-    elif chain == 'destination':
+    elif chain == "destination":
         event_filter = contract.events.Unwrap.createFilter(fromBlock=start_block, toBlock="latest")
-
+    else:
+        raise ValueError("Invalid chain specified.")
+    
     events = event_filter.get_all_entries()
-    print(f"Found {len(events)} events on {chain} chain")
 
     for event in events:
-        if chain == 'source':
+        if chain == "source":
             handleDepositEvent(event)
-        elif chain == 'destination':
+        elif chain == "destination":
             handleUnwrapEvent(event)
 
 def handleDepositEvent(event):
     """
     Handle Deposit events from the source chain
     """
-    print(f"Handling Deposit event: {event}")
     destination_contract_info = getContractInfo("destination")
     w3 = connectTo(destination_chain)
     contract = w3.eth.contract(address=destination_contract_info["address"], abi=destination_contract_info["abi"])
@@ -99,14 +79,13 @@ def handleDepositEvent(event):
     })
 
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print(f"Wrap transaction sent: {tx_hash.hex()}")
+    w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+    print(f"Wrap transaction sent: {signed_tx.hash.hex()}")
 
 def handleUnwrapEvent(event):
     """
     Handle Unwrap events from the destination chain
     """
-    print(f"Handling Unwrap event: {event}")
     source_contract_info = getContractInfo("source")
     w3 = connectTo(source_chain)
     contract = w3.eth.contract(address=source_contract_info["address"], abi=source_contract_info["abi"])
@@ -122,5 +101,5 @@ def handleUnwrapEvent(event):
     })
 
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=warden_private_key)
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print(f"Withdraw transaction sent: {tx_hash.hex()}")
+    w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+    print(f"Withdraw transaction sent: {signed_tx.hash.hex()}")
